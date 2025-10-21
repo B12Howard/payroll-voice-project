@@ -1,0 +1,18 @@
+.env
+config.env
+# Terraform state files (contain sensitive data)
+terraform.tfstate*
+terraform.tfvars
+terraform/function_source/
+terraform/.terraform/
+.firebaserc
+.firebase/
+dist/   
+node_modules/
+*.log
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
