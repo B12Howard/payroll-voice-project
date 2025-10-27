@@ -1,11 +1,15 @@
 import { useState, useEffect } from "react";
+import { useAuth } from "./AuthContext";
 import VoiceToText from "./VoiceToText.jsx";
+import Login from "./Login.jsx";
 import "./App.css";
 
 function App() {
+  const { user, loading, logout } = useAuth();
+  
   const [text, setText] = useState("");
   const [result, setResult] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loadingApps, setLoadingApps] = useState(false);
   const [processingStep, setProcessingStep] = useState("");
   const [isMobile, setIsMobile] = useState(false);
   
@@ -18,7 +22,7 @@ function App() {
   const [employeeResult, setEmployeeResult] = useState(null);
   const [showDateTimeModal, setShowDateTimeModal] = useState(false);
 
-  // Check if screen is mobile size
+  // Check if screen is mobile size - MUST be called before any conditional returns
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth <= 768);
@@ -29,6 +33,15 @@ function App() {
     
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  // Show login if not authenticated (moved after all hooks)
+  if (loading) {
+    return <div className="loading-spinner">Loading...</div>;
+  }
+
+  if (!user) {
+    return <Login />;
+  }
 
   // Function to validate date format (YYYY-MM-DD)
   function isValidDate(dateString) {
@@ -106,7 +119,7 @@ function App() {
     }
 
     try {
-      setLoading(true);
+      setLoadingApps(true);
       
       // Use the server-side CRUD endpoint to avoid CORS issues
       // For now, we'll call the cloud function with the same URL structure
@@ -178,7 +191,7 @@ function App() {
     } catch (err) {
       setEmployeeResult({ error: err.message });
     } finally {
-      setLoading(false);
+      setLoadingApps(false);
     }
   }
 
@@ -229,7 +242,7 @@ function App() {
     } catch (err) {
       setResult({ error: err.message });
     } finally {
-      setLoading(false);
+      setLoadingApps(false);
       setProcessingStep("");
     }
   }
@@ -239,6 +252,9 @@ function App() {
       {/* Header */}
       <div className="header">
         <h2 className={isMobile ? "header-title header-title-mobile" : "header-title"}>Payroll Voice Assistant</h2>
+        <button onClick={logout} className="logout-button">
+          Sign Out
+        </button>
       </div>
 
       {/* Main Content */}
@@ -258,15 +274,15 @@ function App() {
             />
             <VoiceToText 
               onTranscript={handleVoiceTranscript}
-              disabled={loading}
+              disabled={loadingApps}
             />
             
             <button 
               type="submit" 
-              disabled={loading}
+              disabled={loadingApps}
               className={isMobile ? "submit-button submit-button-mobile" : "submit-button"}
             >
-              {loading ? "Processing..." : "Process Payroll"}
+              {loadingApps ? "Processing..." : "Process Payroll"}
             </button>
           </form>
 
@@ -397,10 +413,10 @@ function App() {
                   {actionType && (
                     <button 
                       type="submit" 
-                      disabled={loading}
+                      disabled={loadingApps}
                       className={isMobile ? "submit-button submit-button-mobile" : "submit-button"}
                     >
-                      {loading ? "Processing..." : `Submit ${actionType}`}
+                      {loadingApps ? "Processing..." : `Submit ${actionType}`}
                     </button>
                   )}
                 </>
