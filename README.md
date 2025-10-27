@@ -98,14 +98,31 @@ echo "OPENAI_API_KEY=sk-your-actual-openai-key-here" > .env
 export OPENAI_API_KEY="sk-your-actual-openai-key-here"
 ```
 
-#### 3. Start the Cloud Function Locally
+#### 3. Start the Cloud Functions Locally
+
+**Option A: Run both functions simultaneously (Recommended)**
+```bash
+npm run dev:all
+```
+This starts both `extractDates` on port 8080 and `crud` on port 8081.
+
+**Option B: Run them separately**
+
+Terminal 1 - Extract Dates Function:
 ```bash
 npm start
 # or
-npx functions-framework --target=extractDates --port=8080
+npm run dev
 ```
+Function available at `http://localhost:8080`
 
-The function will be available at `http://localhost:8080`
+Terminal 2 - CRUD Function:
+```bash
+npm run start:crud
+# or
+npm run dev:crud
+```
+Function available at `http://localhost:8081`
 
 #### 4. Test the Function
 
@@ -125,13 +142,37 @@ curl -X POST http://localhost:8080 \
 
 #### 5. Run Frontend + Backend Together
 
-**Terminal 1 - Start Cloud Function:**
+**Option A: Using dev:all (Recommended)**
+
+Terminal 1 - Start Both Cloud Functions:
 ```bash
 cd cloud_function
-npm start
+npm run dev:all
 ```
 
-**Terminal 2 - Start Frontend:**
+Terminal 2 - Start Frontend:
+```bash
+cd frontend
+npm run dev
+```
+
+Visit `http://localhost:5001` to test the full application locally.
+
+**Option B: Run Functions Separately**
+
+Terminal 1 - Extract Dates Function:
+```bash
+cd cloud_function
+npm start  # Runs on port 8080
+```
+
+Terminal 2 - CRUD Function:
+```bash
+cd cloud_function
+npm run start:crud  # Runs on port 8081
+```
+
+Terminal 3 - Start Frontend:
 ```bash
 cd frontend
 npm run dev
@@ -141,10 +182,23 @@ Visit `http://localhost:5001` to test the full application locally.
 
 #### 6. Environment Configuration
 
-The Cloud Function automatically handles different environments:
+The Cloud Functions automatically handle different environments:
 
-- **Local Development**: Uses `OPENAI_API_KEY` from `.env` file or environment variable
-- **Production**: Uses mounted secret volume at `/etc/secrets/openai-api-key`
+- **Local Development**: Uses environment variables from `.env` file
+  - `OPENAI_API_KEY` - Your OpenAI API key
+  - `CRUD_ENDPOINT_URL` - Your Google Apps Script CRUD endpoint URL (optional for local dev)
+  - `ALLOWED_ORIGINS` - Comma-separated list of allowed origins (optional)
+
+- **Production**: 
+  - `OPENAI_API_KEY` - Uses mounted secret volume at `/etc/secrets/openai-api-key`
+  - `CRUD_ENDPOINT_URL` - Provided via Terraform variables
+
+**Example .env file for local development:**
+```bash
+echo "OPENAI_API_KEY=sk-your-key" > cloud_function/.env
+echo "CRUD_ENDPOINT_URL=https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec" >> cloud_function/.env
+echo "ALLOWED_ORIGINS=http://localhost:5001,http://localhost:3000" >> cloud_function/.env
+```
 
 #### 7. CORS Configuration
 

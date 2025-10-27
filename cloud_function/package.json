@@ -3,7 +3,10 @@
   "type": "module",
   "scripts": {
     "start": "functions-framework --target=extractDates --port=8080",
-    "dev": "nodemon --exec \"functions-framework --target=extractDates --port=8080\" --watch . --ext js,json"
+    "start:crud": "functions-framework --target=crud --port=8081",
+    "dev": "nodemon --exec \"functions-framework --target=extractDates --port=8080\" --watch . --ext js,json",
+    "dev:crud": "nodemon --exec \"functions-framework --target=crud --port=8081\" --watch . --ext js,json",
+    "dev:all": "concurrently \"npm run dev\" \"npm run dev:crud\""
   },
   "dependencies": {
     "@google-cloud/functions-framework": "^4.0.0",
@@ -12,6 +15,7 @@
     "openai": "^6.6.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10"
+    "nodemon": "^3.1.10",
+    "concurrently": "^8.2.2"
   }
 }

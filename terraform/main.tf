@@ -5,7 +5,7 @@ terraform {
       version = "~> 6.0"
     }
   }
-  required_version = ">= 1.6"
+  required_version = ">= 1.5"
 }
 
 provider "google" {
@@ -68,6 +68,11 @@ resource "google_cloudfunctions2_function" "extract_dates" {
     timeout_seconds    = 60
     ingress_settings   = "ALLOW_INTERNAL_AND_GCLB"
 
+    # Pass environment variables
+    environment_variables = {
+      ALLOWED_ORIGINS = var.allowed_origins
+    }
+
     # Securely inject secret
     secret_volumes {
       mount_path = "/etc/secrets"
@@ -77,6 +82,34 @@ resource "google_cloudfunctions2_function" "extract_dates" {
   }
 }
 
-output "function_url" {
-  value = google_cloudfunctions2_function.extract_dates.service_config[0].uri
+# CRUD Cloud Function
+resource "google_cloudfunctions2_function" "crud" {
+  name        = "crud"
+  location    = var.region
+  description = "Employee CRUD operations"
+
+  build_config {
+    runtime     = "nodejs20"
+    entry_point = "crud"
+    source {
+      storage_source {
+        bucket = google_storage_bucket.function_bucket.name
+        object = google_storage_bucket_object.function_zip.name
+      }
+    }
+  }
+
+  service_config {
+    max_instance_count = 2
+    available_memory   = "256M"
+    timeout_seconds    = 60
+    ingress_settings   = "ALLOW_ALL"
+    
+    # Pass environment variables
+    environment_variables = {
+      CRUD_ENDPOINT_URL = var.crud_endpoint_url
+      ALLOWED_ORIGINS   = var.allowed_origins
+    }
+  }
 }
+

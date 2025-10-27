@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import VoiceToText from "./VoiceToText.jsx";
+import "./App.css";
 
 function App() {
   const [text, setText] = useState("");
@@ -7,6 +8,15 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [processingStep, setProcessingStep] = useState("");
   const [isMobile, setIsMobile] = useState(false);
+  
+  // Employee management state
+  const [selectedEmployee, setSelectedEmployee] = useState("");
+  const [actionType, setActionType] = useState("");
+  const [dateTime, setDateTime] = useState("");
+  const [number, setNumber] = useState("");
+  const [status, setStatus] = useState("In");
+  const [employeeResult, setEmployeeResult] = useState(null);
+  const [showDateTimeModal, setShowDateTimeModal] = useState(false);
 
   // Check if screen is mobile size
   useEffect(() => {
@@ -64,6 +74,114 @@ function App() {
     setText(transcript);
   }
 
+  // Parse datetime in Pacific time (returns 24-hour format)
+  function parsePacificTime(dateTimeString) {
+    if (!dateTimeString) return null;
+    
+    // Parse the datetime-local string (YYYY-MM-DDTHH:mm)
+    const localDate = new Date(dateTimeString);
+    
+    // Get Pacific time components using toLocaleString
+    // hour12: false ensures 24-hour format (0-23)
+    const pstMonth = parseInt(localDate.toLocaleString("en-US", { timeZone: "America/Los_Angeles", month: "numeric" }));
+    const pstDay = parseInt(localDate.toLocaleString("en-US", { timeZone: "America/Los_Angeles", day: "numeric" }));
+    const pstHour = parseInt(localDate.toLocaleString("en-US", { timeZone: "America/Los_Angeles", hour: "2-digit", hour12: false }));
+    const pstMinute = parseInt(localDate.toLocaleString("en-US", { timeZone: "America/Los_Angeles", minute: "2-digit" }));
+    
+    return {
+      month: pstMonth,   // 1-12
+      day: pstDay,       // 1-31
+      hour: pstHour,     // 0-23 (24-hour format)
+      minute: pstMinute  // 0-59
+    };
+  }
+
+  // Handle employee management submit
+  async function handleEmployeeSubmit(e) {
+    e.preventDefault();
+    
+    if (!selectedEmployee || !actionType) {
+      setEmployeeResult({ error: "Please select an employee and action." });
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      // Use the server-side CRUD endpoint to avoid CORS issues
+      // For now, we'll call the cloud function with the same URL structure
+      // In production, this would be the dedicated CRUD Cloud Function URL
+      const crudFunctionUrl = import.meta.env.VITE_CRUD_URL || "http://localhost:8081";
+      
+      let requestBody = {
+        action: actionType,
+        employee: selectedEmployee
+      };
+
+      // Build options based on action type
+      if (actionType === "add") {
+        if (!dateTime) {
+          throw new Error("Please select a date and time");
+        }
+        const pstTime = parsePacificTime(dateTime);
+        requestBody.opts = {
+          month: pstTime.month,
+          day: pstTime.day,
+          hour: pstTime.hour,
+          minute: pstTime.minute,
+          status: status
+        };
+      } else if (actionType === "change") {
+        if (!dateTime || !number) {
+          throw new Error("Please enter both date/time and row number");
+        }
+        const pstTime = parsePacificTime(dateTime);
+        requestBody.opts = {
+          rowNum: parseInt(number),
+          newMonth: pstTime.month,
+          newDay: pstTime.day,
+          newHour: pstTime.hour,
+          newMinute: pstTime.minute,
+          status: status
+        };
+      } else if (actionType === "delete") {
+        if (!number) {
+          throw new Error("Please enter a row number");
+        }
+        requestBody.opts = {
+          rowNum: parseInt(number)
+        };
+      }
+
+      const res = await fetch(crudFunctionUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+
+      const data = await res.json();
+      setEmployeeResult(data);
+      
+      // Clear form fields if successful
+      if (data.success) {
+        setSelectedEmployee("");
+        setActionType("");
+        setDateTime("");
+        setNumber("");
+        setStatus("In");
+      }
+      
+    } catch (err) {
+      setEmployeeResult({ error: err.message });
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setLoading(true);
@@ -117,163 +235,231 @@ function App() {
   }
 
   return (
-    <div style={{ 
-      display: "flex", 
-      flexDirection: "column", 
-      // height: "100vh", 
-      fontFamily: "sans-serif",
-      backgroundColor: "#f5f5f5",
-    }}>
+    <div className="app-container">
       {/* Header */}
-      <div style={{ 
-        backgroundColor: "#fff", 
-        padding: "1rem", 
-        boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-        zIndex: 1
-      }}>
-        <h2 style={{ margin: 0, color: "#333", fontSize: isMobile ? "1.2rem" : "1.5rem" }}>Payroll Voice Assistant</h2>
+      <div className="header">
+        <h2 className={isMobile ? "header-title header-title-mobile" : "header-title"}>Payroll Voice Assistant</h2>
       </div>
 
       {/* Main Content */}
-      <div style={{ 
-        display: "flex", 
-        flex: 1, 
-        gap: isMobile ? "0.75rem" : "1rem", 
-        padding: isMobile ? "0.75rem" : "1rem",
-        flexDirection: isMobile ? "column" : "row"
-      }}>
+      <div className={isMobile ? "main-content main-content-mobile" : "main-content"}>
         {/* Left Panel - Input Form */}
-        <div style={{ 
-          flex: isMobile ? "0 0 auto" : "0 0 400px", 
-          backgroundColor: "#fff", 
-          borderRadius: "8px", 
-          padding: isMobile ? "1rem" : "1.5rem",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-          display: "flex",
-          flexDirection: "column",
-          maxWidth: isMobile ? "100%" : "400px",
-          minHeight: isMobile ? "auto" : "0",
-        }}>
-          <form onSubmit={handleSubmit} style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-            <label style={{ 
-              fontSize: isMobile ? "1rem" : "1.1rem", 
-              fontWeight: "600", 
-              marginBottom: "0.5rem",
-              color: "#333"
-            }}>
+        <div className={isMobile ? "left-panel left-panel-mobile" : "left-panel"}>
+          <form onSubmit={handleSubmit} className="form">
+            <label className={isMobile ? "form-label form-label-mobile" : "form-label"}>
               Enter Payroll Request:
             </label>
             <textarea
               placeholder="e.g. run payroll from Oct 1 to 15, or process last week's payroll"
               value={text}
               onChange={(e) => setText(e.target.value)}
-              style={{ 
-                width: "100%", 
-                padding: isMobile ? "10px" : "12px", 
-                border: "2px solid #ddd",
-                borderRadius: "6px",
-                fontSize: "16px",
-                minHeight: isMobile ? "80px" : "100px",
-                resize: "vertical",
-                fontFamily: "inherit",
-                boxSizing: "border-box"
-              }}
+              className={isMobile ? "textarea textarea-mobile" : "textarea"}
               required
             />
-                   <VoiceToText 
-                     onTranscript={handleVoiceTranscript}
-                     disabled={loading}
-                   />
-                   
-                   <button 
-                     type="submit" 
-                     disabled={loading}
-                     style={{ 
-                       marginTop: "1rem", 
-                       padding: isMobile ? "14px 20px" : "12px 24px", 
-                       backgroundColor: loading ? "#6c757d" : "#007bff",
-                       color: "white", 
-                       border: "none", 
-                       borderRadius: "6px", 
-                       fontSize: "16px",
-                       fontWeight: "600",
-                       cursor: loading ? "not-allowed" : "pointer",
-                       transition: "background-color 0.2s",
-                       minHeight: isMobile ? "48px" : "auto"
-                     }}
-                   >
-                     {loading ? "Processing..." : "Process Payroll"}
-                   </button>
+            <VoiceToText 
+              onTranscript={handleVoiceTranscript}
+              disabled={loading}
+            />
+            
+            <button 
+              type="submit" 
+              disabled={loading}
+              className={isMobile ? "submit-button submit-button-mobile" : "submit-button"}
+            >
+              {loading ? "Processing..." : "Process Payroll"}
+            </button>
           </form>
+
+          {/* Employee Management Section */}
+          <div className="employee-section">
+            <h3 className={isMobile ? "section-title section-title-mobile" : "section-title"}>
+              Employee Management
+            </h3>
+            
+            <form onSubmit={handleEmployeeSubmit} className="form">
+              {/* Employee Name Input */}
+              <label className={isMobile ? "form-label form-label-mobile" : "form-label"}>
+                Employee Name:
+              </label>
+              <input
+                type="text"
+                value={selectedEmployee}
+                onChange={(e) => {
+                  setSelectedEmployee(e.target.value);
+                  setActionType(""); // Reset action when employee changes
+                }}
+                placeholder="Enter employee name"
+                className={isMobile ? "text-input text-input-mobile" : "text-input"}
+              />
+
+              {/* Action Type Dropdown - only show when employee is selected */}
+              {selectedEmployee && (
+                <>
+                  <label className={isMobile ? "form-label form-label-mobile" : "form-label"}>
+                    Action:
+                  </label>
+                  <select
+                    value={actionType}
+                    onChange={(e) => {
+                      setActionType(e.target.value);
+                      setDateTime("");
+                      setNumber("");
+                    }}
+                    className={isMobile ? "select-input select-input-mobile" : "select-input"}
+                  >
+                    <option value="">Select action...</option>
+                    <option value="add">Add</option>
+                    <option value="change">Change</option>
+                    <option value="delete">Delete</option>
+                  </select>
+
+                  {/* Conditional inputs based on action type */}
+                  {actionType === "add" && (
+                    <>
+                      <label className={isMobile ? "form-label form-label-mobile" : "form-label"}>
+                        Date & Time:
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setShowDateTimeModal(true)}
+                        className={isMobile ? "datetime-button datetime-button-mobile" : "datetime-button"}
+                      >
+                        {dateTime ? new Date(dateTime).toLocaleString() : "Select Date & Time"}
+                      </button>
+                      <label className={isMobile ? "form-label form-label-mobile" : "form-label"}>
+                        Status:
+                      </label>
+                      <select
+                        value={status}
+                        onChange={(e) => setStatus(e.target.value)}
+                        className={isMobile ? "select-input select-input-mobile" : "select-input"}
+                      >
+                        <option value="In">In</option>
+                        <option value="Out">Out</option>
+                      </select>
+                    </>
+                  )}
+
+                  {actionType === "delete" && (
+                    <>
+                      <label className={isMobile ? "form-label form-label-mobile" : "form-label"}>
+                        Row Number:
+                      </label>
+                      <input
+                        type="number"
+                        value={number}
+                        onChange={(e) => setNumber(e.target.value)}
+                        placeholder="Enter row number to delete"
+                        className={isMobile ? "number-input number-input-mobile" : "number-input"}
+                        min="1"
+                      />
+                    </>
+                  )}
+
+                  {actionType === "change" && (
+                    <>
+                      <label className={isMobile ? "form-label form-label-mobile" : "form-label"}>
+                        Date & Time:
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setShowDateTimeModal(true)}
+                        className={isMobile ? "datetime-button datetime-button-mobile" : "datetime-button"}
+                      >
+                        {dateTime ? new Date(dateTime).toLocaleString() : "Select Date & Time"}
+                      </button>
+                      <label className={isMobile ? "form-label form-label-mobile" : "form-label"}>
+                        Row Number:
+                      </label>
+                      <input
+                        type="number"
+                        value={number}
+                        onChange={(e) => setNumber(e.target.value)}
+                        placeholder="Enter row number to change"
+                        className={isMobile ? "number-input number-input-mobile" : "number-input"}
+                        min="1"
+                      />
+                      <label className={isMobile ? "form-label form-label-mobile" : "form-label"}>
+                        Status:
+                      </label>
+                      <select
+                        value={status}
+                        onChange={(e) => setStatus(e.target.value)}
+                        className={isMobile ? "select-input select-input-mobile" : "select-input"}
+                      >
+                        <option value="In">In</option>
+                        <option value="Out">Out</option>
+                      </select>
+                    </>
+                  )}
+
+                  {/* Submit Button */}
+                  {actionType && (
+                    <button 
+                      type="submit" 
+                      disabled={loading}
+                      className={isMobile ? "submit-button submit-button-mobile" : "submit-button"}
+                    >
+                      {loading ? "Processing..." : `Submit ${actionType}`}
+                    </button>
+                  )}
+                </>
+              )}
+            </form>
+
+            {/* Employee Result Display */}
+            {employeeResult && (
+              <div className="employee-result">
+                {employeeResult.error ? (
+                  <div className="error-box">
+                    <strong>Error:</strong> {employeeResult.error}
+                  </div>
+                ) : (
+                  <div className="success-box">
+                    <strong>✅ Success!</strong>
+                    <div className="success-box-details">
+                      {employeeResult.message || `Action '${employeeResult.action}' completed for ${employeeResult.employee}`}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Status and Results */}
           {processingStep && (
-            <div style={{ 
-              marginTop: "1rem", 
-              padding: "12px", 
-              backgroundColor: "#e3f2fd", 
-              borderRadius: "6px",
-              border: "1px solid #2196f3"
-            }}>
+            <div className="status-box">
               <strong>Status:</strong> {processingStep}
             </div>
           )}
 
           {result && (
-            <div style={{ 
-              marginTop: "1rem", 
-              maxHeight: "300px", 
-              overflow: "auto"
-            }}>
+            <div className="results-container">
               {result.error ? (
-                <div style={{ 
-                  padding: "12px", 
-                  backgroundColor: "#ffebee", 
-                  borderRadius: "6px",
-                  border: "1px solid #f44336",
-                  color: "#c62828"
-                }}>
+                <div className="error-box">
                   <strong>Error:</strong> {result.error}
                 </div>
               ) : result.success ? (
-                <div style={{ 
-                  padding: "12px", 
-                  backgroundColor: "#e8f5e8", 
-                  borderRadius: "6px",
-                  border: "1px solid #4caf50"
-                }}>
+                <div className="success-box">
                   <strong>✅ Success!</strong>
-                  <div style={{ marginTop: "8px" }}>
+                  <div className="payroll-result-section">
                     <strong>Extracted Dates:</strong>
-                    <div style={{ fontSize: "14px", marginTop: "4px" }}>
+                    <div className="success-box-details">
                       From: {result.extractedDates.fromDate}<br/>
                       To: {result.extractedDates.toDate}
                     </div>
                   </div>
                   {result.payrollResult && (
-                    <div style={{ marginTop: "8px" }}>
+                    <div className="payroll-result-section">
                       <strong>Payroll System Response:</strong>
-                      <pre style={{ 
-                        fontSize: "12px", 
-                        marginTop: "4px", 
-                        backgroundColor: "#f8f9fa", 
-                        padding: "8px", 
-                        borderRadius: "4px",
-                        overflow: "auto"
-                      }}>
+                      <pre className="payroll-result-pre">
                         {JSON.stringify(result.payrollResult, null, 2)}
                       </pre>
                     </div>
                   )}
                 </div>
               ) : (
-                <pre style={{ 
-                  background: "#f8f9fa", 
-                  padding: "12px", 
-                  borderRadius: "6px",
-                  fontSize: "12px",
-                  overflow: "auto"
-                }}>
+                <pre className="results-pre">
                   {JSON.stringify(result, null, 2)}
                 </pre>
               )}
@@ -282,47 +468,65 @@ function App() {
         </div>
 
         {/* Right Panel - Google Sheet */}
-        <div style={{ 
-          flex: 1, 
-          backgroundColor: "#fff", 
-          borderRadius: "8px", 
-          boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-          overflow: "hidden",
-          minHeight: isMobile ? "400px" : "0"
-        }}>
-          <div style={{ 
-            padding: isMobile ? "0.75rem" : "1rem", 
-            borderBottom: "1px solid #eee",
-            backgroundColor: "#f8f9fa"
-          }}>
-            <h3 style={{ 
-              margin: 0, 
-              fontSize: isMobile ? "1rem" : "1.1rem", 
-              color: "#333" 
-            }}>
+        <div className={isMobile ? "right-panel right-panel-mobile" : "right-panel"}>
+          <div className={isMobile ? "right-panel-header right-panel-header-mobile" : "right-panel-header"}>
+            <h3 className={isMobile ? "right-panel-title right-panel-title-mobile" : "right-panel-title"}>
               Payroll Spreadsheet
             </h3>
-            <p style={{ 
-              margin: "0.5rem 0 0 0", 
-              fontSize: isMobile ? "12px" : "14px", 
-              color: "#666" 
-            }}>
+            <p className={isMobile ? "right-panel-description right-panel-description-mobile" : "right-panel-description"}>
               View and manage payroll data
             </p>
           </div>
           <iframe
             src={import.meta.env.VITE_SHEET_URL}
-            style={{
-              width: "100%",
-              height: "100%",
-              minHeight: "800px",
-              border: "none",
-              borderRadius: "0 0 8px 8px"
-            }}
+            className="spreadsheet-iframe"
             title="Payroll Spreadsheet"
           />
         </div>
       </div>
+
+      {/* DateTime Modal */}
+      {showDateTimeModal && (
+        <div className="modal-overlay" onClick={() => setShowDateTimeModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Select Date & Time</h3>
+              <button 
+                className="modal-close"
+                onClick={() => setShowDateTimeModal(false)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
+              <input
+                type="datetime-local"
+                value={dateTime}
+                onChange={(e) => setDateTime(e.target.value)}
+                className="datetime-input"
+                style={{ width: '100%', fontSize: '16px' }}
+              />
+            </div>
+            <div className="modal-footer">
+              <button
+                className="modal-button modal-button-primary"
+                onClick={() => setShowDateTimeModal(false)}
+              >
+                Done
+              </button>
+              <button
+                className="modal-button modal-button-secondary"
+                onClick={() => {
+                  setDateTime("");
+                  setShowDateTimeModal(false);
+                }}
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
