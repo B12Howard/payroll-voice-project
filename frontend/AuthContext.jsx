@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { signInWithRedirect, signOut, onAuthStateChanged, getRedirectResult } from 'firebase/auth';
+import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
 import { auth, googleProvider, ALLOWED_EMAILS } from './firebase';
 
 const AuthContext = createContext({});
@@ -11,18 +11,9 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    // Check for redirect result
-    getRedirectResult(auth).then((result) => {
-      if (result) {
-        // User just signed in via redirect
-        console.log('Signed in via redirect:', result.user);
-      }
-    }).catch((error) => {
-      console.error('Redirect error:', error);
-    });
-
+  useEffect(() => {  
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+
       if (firebaseUser) {
         // Check if user's email is in the allowlist
         if (ALLOWED_EMAILS.includes(firebaseUser.email)) {
@@ -46,11 +37,11 @@ export const AuthProvider = ({ children }) => {
   const login = async () => {
     try {
       setError('');
-      await signInWithRedirect(auth, googleProvider);
-      // User will be redirected to Google, then back to the app
-      // The redirect result will be handled in the useEffect
+      const result = await signInWithPopup(auth, googleProvider);
     } catch (err) {
       console.error('Login error:', err);
+      console.error('Error code:', err.code);
+      console.error('Error message:', err.message);
       setError(err.message);
     }
   };

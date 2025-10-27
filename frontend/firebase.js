@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, browserLocalPersistence } from 'firebase/auth';
 
 // Your Firebase configuration
 // Get this from Firebase Console > Project Settings > General > Your apps
@@ -15,6 +15,12 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+
+// Configure persistence - store auth in localStorage
+auth.setPersistence(browserLocalPersistence).catch((error) => {
+  console.error('Failed to set persistence:', error);
+});
+
 export const googleProvider = new GoogleAuthProvider();
 
 // List of allowed email addresses from environment variable
