@@ -22,6 +22,26 @@ function App() {
   const [employeeResult, setEmployeeResult] = useState(null);
   const [showDateTimeModal, setShowDateTimeModal] = useState(false);
 
+  // Auto-clear result after 5 seconds
+  useEffect(() => {
+    if (result) {
+      const timer = setTimeout(() => {
+        setResult(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [result]);
+
+  // Auto-clear employeeResult after 5 seconds
+  useEffect(() => {
+    if (employeeResult) {
+      const timer = setTimeout(() => {
+        setEmployeeResult(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [employeeResult]);
+
   // Check if screen is mobile size - MUST be called before any conditional returns
   useEffect(() => {
     const checkMobile = () => {
@@ -166,9 +186,15 @@ function App() {
         };
       }
 
+      // Get Firebase ID token for authentication
+      const idToken = user ? await user.getIdToken() : null;
+      
       const res = await fetch(crudFunctionUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          ...(idToken && { "Authorization": `Bearer ${idToken}` })
+        },
         body: JSON.stringify(requestBody),
       });
 
@@ -197,7 +223,7 @@ function App() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setLoading(true);
+    setLoadingApps(true);
     setResult(null);
     setProcessingStep("");
 
@@ -207,9 +233,15 @@ function App() {
       const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8080";
       console.log("Making request to:", apiUrl);
       
+      // Get Firebase ID token for authentication
+      const idToken = user ? await user.getIdToken() : null;
+      
       const res = await fetch(apiUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          ...(idToken && { "Authorization": `Bearer ${idToken}` })
+        },
         body: JSON.stringify({ spokenText: text }),
       });
       
@@ -285,6 +317,39 @@ function App() {
               {loadingApps ? "Processing..." : "Process Payroll"}
             </button>
           </form>
+
+          {result && (
+            <div className="results-container">
+              {result.error ? (
+                <div className="error-box">
+                  <strong>Error:</strong> {result.error}
+                </div>
+              ) : result.success ? (
+                <div className="success-box">
+                  <strong>✅ Success!</strong>
+                  <div className="payroll-result-section">
+                    <strong>Extracted Dates:</strong>
+                    <div className="success-box-details">
+                      From: {result.extractedDates.fromDate}<br/>
+                      To: {result.extractedDates.toDate}
+                    </div>
+                  </div>
+                  {result.payrollResult && (
+                    <div className="payroll-result-section">
+                      <strong>Payroll System Response:</strong>
+                      <pre className="payroll-result-pre">
+                        {JSON.stringify(result.payrollResult, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <pre className="results-pre">
+                  {JSON.stringify(result, null, 2)}
+                </pre>
+              )}
+            </div>
+          )}
 
           {/* Employee Management Section */}
           <div className="employee-section">
@@ -446,39 +511,6 @@ function App() {
           {processingStep && (
             <div className="status-box">
               <strong>Status:</strong> {processingStep}
-            </div>
-          )}
-
-          {result && (
-            <div className="results-container">
-              {result.error ? (
-                <div className="error-box">
-                  <strong>Error:</strong> {result.error}
-                </div>
-              ) : result.success ? (
-                <div className="success-box">
-                  <strong>✅ Success!</strong>
-                  <div className="payroll-result-section">
-                    <strong>Extracted Dates:</strong>
-                    <div className="success-box-details">
-                      From: {result.extractedDates.fromDate}<br/>
-                      To: {result.extractedDates.toDate}
-                    </div>
-                  </div>
-                  {result.payrollResult && (
-                    <div className="payroll-result-section">
-                      <strong>Payroll System Response:</strong>
-                      <pre className="payroll-result-pre">
-                        {JSON.stringify(result.payrollResult, null, 2)}
-                      </pre>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <pre className="results-pre">
-                  {JSON.stringify(result, null, 2)}
-                </pre>
-              )}
             </div>
           )}
         </div>

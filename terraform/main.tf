@@ -66,11 +66,13 @@ resource "google_cloudfunctions2_function" "extract_dates" {
     max_instance_count = 2
     available_memory   = "256M"
     timeout_seconds    = 60
-    ingress_settings   = "ALLOW_INTERNAL_AND_GCLB"
+    ingress_settings   = "ALLOW_ALL"
 
     # Pass environment variables
     environment_variables = {
-      ALLOWED_ORIGINS = var.allowed_origins
+      ALLOWED_ORIGINS      = var.allowed_origins
+      ALLOWED_EMAILS       = var.allowed_emails
+      SECOND_ENDPOINT_URL = var.second_endpoint_url
     }
 
     # Securely inject secret
@@ -81,6 +83,9 @@ resource "google_cloudfunctions2_function" "extract_dates" {
     }
   }
 }
+
+# Allow unauthenticated invocations for extract_dates function
+# Note: Managed via gcloud command to use roles/run.invoker instead of roles/cloudfunctions.invoker
 
 # CRUD Cloud Function
 resource "google_cloudfunctions2_function" "crud" {
@@ -109,7 +114,24 @@ resource "google_cloudfunctions2_function" "crud" {
     environment_variables = {
       CRUD_ENDPOINT_URL = var.crud_endpoint_url
       ALLOWED_ORIGINS   = var.allowed_origins
+      ALLOWED_EMAILS    = var.allowed_emails
     }
   }
 }
 
+# IAM bindings: Allow public access to functions
+# Functions handle authentication via Firebase ID tokens in code and check email allowlist
+# Note: Cloud Functions v2 are deployed as Cloud Run services with lowercase service names
+resource "google_cloud_run_service_iam_member" "extract_dates_public_access" {
+  location = google_cloudfunctions2_function.extract_dates.location
+  service  = "extractdates"  # Actual Cloud Run service name (lowercase)
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
+resource "google_cloud_run_service_iam_member" "crud_public_access" {
+  location = google_cloudfunctions2_function.crud.location
+  service  = "crud"
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}

@@ -1,7 +1,13 @@
 import { setCorsHeaders, handlePreflight, isOriginAllowed } from './utils.js';
+import { verifyToken } from './verifyToken.js';
 
 export const crud = async (req, res) => {
   const origin = req.headers.origin;
+  
+  console.log("=== CRUD Function Called ===");
+  console.log("Origin:", origin);
+  console.log("Method:", req.method);
+  console.log("Allowed origins from env:", process.env.ALLOWED_ORIGINS);
   
   // Set CORS headers FIRST (before any method checks)
   setCorsHeaders(req, res);
@@ -11,9 +17,22 @@ export const crud = async (req, res) => {
   if (preflight === false) {
     if (req.method !== "POST") return res.status(405).send("Method Not Allowed");
 
+    // Verify Firebase token
+    const authHeader = req.headers.authorization;
+    const tokenVerification = await verifyToken(authHeader);
+    
+    if (!tokenVerification.verified) {
+      console.log("Authentication failed:", tokenVerification.error);
+      return res.status(401).json({ 
+        success: false,
+        error: tokenVerification.error || 'Unauthorized' 
+      });
+    }
+
     // Security: Only allow requests from allowed origins
     if (!isOriginAllowed(req)) {
       console.log("Blocked request from unauthorized origin:", origin);
+      console.log("Allowed origins:", process.env.ALLOWED_ORIGINS);
       return res.status(403).json({ error: "Forbidden: Origin not allowed" });
     }
   } else {

@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import fs from "fs";
 import { setCorsHeaders, handlePreflight, isOriginAllowed } from './utils.js';
+import { verifyToken } from './verifyToken.js';
 
 export const extractDates = async (req, res) => {
   const origin = req.headers.origin;
@@ -17,6 +18,18 @@ export const extractDates = async (req, res) => {
   const preflight = handlePreflight(req, res);
   if (preflight === false) {
     if (req.method !== "POST") return res.status(405).send("Method Not Allowed");
+
+    // Verify Firebase token
+    const authHeader = req.headers.authorization;
+    const tokenVerification = await verifyToken(authHeader);
+    
+    if (!tokenVerification.verified) {
+      console.log("Authentication failed:", tokenVerification.error);
+      return res.status(401).json({ 
+        success: false,
+        error: tokenVerification.error || 'Unauthorized' 
+      });
+    }
 
     // Security: Only allow requests from allowed origins
     if (!isOriginAllowed(req)) {
