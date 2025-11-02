@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "./AuthContext";
 import VoiceToText from "./VoiceToText.jsx";
 import Login from "./Login.jsx";
+import EmployeeVoiceInput from "./EmployeeVoiceInput.jsx";
 import "./App.css";
 
 function App() {
@@ -21,6 +22,19 @@ function App() {
   const [status, setStatus] = useState("In");
   const [employeeResult, setEmployeeResult] = useState(null);
   const [showDateTimeModal, setShowDateTimeModal] = useState(false);
+  
+  // Voice input and preview state
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [parsedData, setParsedData] = useState(null);
+  const [employeeList, setEmployeeList] = useState([]); // Will be populated from API or manually
+  const availableVerbs = ["add", "change", "delete"];
+
+  // Update employee list when user manually enters an employee name
+  useEffect(() => {
+    if (selectedEmployee && !employeeList.includes(selectedEmployee)) {
+      setEmployeeList(prev => [...prev, selectedEmployee]);
+    }
+  }, [selectedEmployee]);
 
   // Auto-clear result after 5 seconds
   useEffect(() => {
@@ -107,7 +121,29 @@ function App() {
     setText(transcript);
   }
 
+  // Extract date/time components from a Date object parsed by chrono
+  // When chrono parses "7pm", it interprets it and stores it in the Date object
+  // We extract the local time components (which represent what chrono parsed)
+  // and treat them as if they're Pacific time values
+  function extractPacificTimeComponents(dateObj) {
+    if (!dateObj) return null;
+    
+    // Chrono parses times like "7pm" relative to a reference date
+    // It creates a Date object with the parsed time stored
+    // We extract using getHours()/getMinutes() which give us the local time components
+    // These represent what chrono parsed (e.g., "7pm" = 19:00)
+    // We treat these values as Pacific time
+    
+    return {
+      month: dateObj.getMonth() + 1,   // getMonth() returns 0-11, so add 1 for 1-12
+      day: dateObj.getDate(),           // 1-31
+      hour: dateObj.getHours(),         // 0-23 (this should be 19 for "7pm")
+      minute: dateObj.getMinutes()      // 0-59
+    };
+  }
+
   // Parse datetime in Pacific time (returns 24-hour format)
+  // This is used for datetime-local input strings (YYYY-MM-DDTHH:mm)
   function parsePacificTime(dateTimeString) {
     if (!dateTimeString) return null;
     
@@ -127,6 +163,142 @@ function App() {
       hour: pstHour,     // 0-23 (24-hour format)
       minute: pstMinute  // 0-59
     };
+  }
+
+  // Handle parsed data from voice input
+  function handleParsedData(parsed) {
+    setParsedData(parsed);
+    setShowPreviewModal(true);
+  }
+
+  // Handle accept from preview modal - actually submit to API
+  async function handleAcceptPreview() {
+    if (!parsedData) return;
+
+    try {
+      setLoadingApps(true);
+      setShowPreviewModal(false);
+      
+      const crudFunctionUrl = import.meta.env.VITE_CRUD_URL || "http://localhost:8081";
+      
+      let requestBody = {
+        action: parsedData.verb,
+        employee: parsedData.name
+      };
+
+      // Build options based on action type
+      if (parsedData.verb === "add") {
+        if (!parsedData.dateTime) {
+          throw new Error("Date and time are required for add action");
+        }
+        
+        // Use dateComponents if available (direct from chrono parsing, more accurate)
+        // Otherwise extract from Date object
+        let pstTime;
+        if (parsedData.dateComponents) {
+          // Use components directly from chrono - these are what was parsed (e.g., "7pm" = 19)
+          pstTime = {
+            month: parsedData.dateComponents.month,
+            day: parsedData.dateComponents.day,
+            hour: parsedData.dateComponents.hour,
+            minute: parsedData.dateComponents.minute
+          };
+        } else {
+          // Fallback: extract from Date object
+          const dateObj = parsedData.dateTime instanceof Date 
+            ? parsedData.dateTime 
+            : new Date(parsedData.dateTime);
+          pstTime = extractPacificTimeComponents(dateObj);
+        }
+        
+        // Use parsed status if available, otherwise fall back to state status
+        const finalStatus = parsedData.status || status;
+        requestBody.opts = {
+          month: pstTime.month,
+          day: pstTime.day,
+          hour: pstTime.hour,
+          minute: pstTime.minute,
+          status: finalStatus
+        };
+      } else if (parsedData.verb === "change") {
+        if (!parsedData.dateTime) {
+          throw new Error("Date and time are required for change action");
+        }
+        
+        // Use dateComponents if available (direct from chrono parsing, more accurate)
+        // Otherwise extract from Date object
+        let pstTime;
+        if (parsedData.dateComponents) {
+          // Use components directly from chrono - these are what was parsed (e.g., "7pm" = 19)
+          pstTime = {
+            month: parsedData.dateComponents.month,
+            day: parsedData.dateComponents.day,
+            hour: parsedData.dateComponents.hour,
+            minute: parsedData.dateComponents.minute
+          };
+        } else {
+          // Fallback: extract from Date object
+          const dateObj = parsedData.dateTime instanceof Date 
+            ? parsedData.dateTime 
+            : new Date(parsedData.dateTime);
+          pstTime = extractPacificTimeComponents(dateObj);
+        }
+        
+        // Use parsed status if available, otherwise fall back to state status
+        const finalStatus = parsedData.status || status;
+        requestBody.opts = {
+          rowNum: parsedData.rowNumber,
+          newMonth: pstTime.month,
+          newDay: pstTime.day,
+          newHour: pstTime.hour,
+          newMinute: pstTime.minute,
+          status: finalStatus
+        };
+      } else if (parsedData.verb === "delete") {
+        requestBody.opts = {
+          rowNum: parsedData.rowNumber
+        };
+      }
+
+      // Get Firebase ID token for authentication
+      const idToken = user ? await user.getIdToken() : null;
+      
+      const res = await fetch(crudFunctionUrl, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          ...(idToken && { "Authorization": `Bearer ${idToken}` })
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+
+      const data = await res.json();
+      setEmployeeResult(data);
+      
+      // Clear parsed data if successful
+      if (data.success) {
+        // Add employee to list if not already there
+        if (parsedData.name && !employeeList.includes(parsedData.name)) {
+          setEmployeeList(prev => [...prev, parsedData.name]);
+        }
+        setParsedData(null);
+      }
+      
+    } catch (err) {
+      setEmployeeResult({ error: err.message });
+    } finally {
+      setLoadingApps(false);
+    }
+  }
+
+  // Handle cancel from preview modal - clear everything
+  function handleCancelPreview() {
+    setShowPreviewModal(false);
+    setParsedData(null);
   }
 
   // Handle employee management submit
@@ -357,6 +529,14 @@ function App() {
               Employee Management
             </h3>
             
+            {/* Voice/Text Input Component */}
+            <EmployeeVoiceInput
+              onParse={handleParsedData}
+              availableVerbs={availableVerbs}
+              availableEmployees={employeeList}
+              disabled={loadingApps}
+            />
+            
             <form onSubmit={handleEmployeeSubmit} className="form">
               {/* Employee Name Input */}
               <label className={isMobile ? "form-label form-label-mobile" : "form-label"}>
@@ -532,6 +712,72 @@ function App() {
           />
         </div>
       </div>
+
+      {/* Preview Modal */}
+      {showPreviewModal && parsedData && (
+        <div className="modal-overlay" onClick={handleCancelPreview}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Review Changes</h3>
+              <button 
+                className="modal-close"
+                onClick={handleCancelPreview}
+              >
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
+              <div style={{ marginBottom: '16px' }}>
+                <strong>Action:</strong> {parsedData.verb}
+              </div>
+              <div style={{ marginBottom: '16px' }}>
+                <strong>Employee:</strong> {parsedData.name}
+              </div>
+              {parsedData.rowNumber && (
+                <div style={{ marginBottom: '16px' }}>
+                  <strong>Row Number:</strong> {parsedData.rowNumber}
+                </div>
+              )}
+              {parsedData.dateTime && (
+                <div style={{ marginBottom: '16px' }}>
+                  <strong>Date & Time:</strong> {new Date(parsedData.dateTime).toLocaleString()}
+                </div>
+              )}
+              {parsedData.status && (
+                <div style={{ marginBottom: '16px' }}>
+                  <strong>Status:</strong> {parsedData.status}
+                </div>
+              )}
+              <div style={{ 
+                marginTop: '16px', 
+                padding: '12px', 
+                backgroundColor: '#f8f9fa', 
+                borderRadius: '4px',
+                fontSize: '14px',
+                color: '#666'
+              }}>
+                <strong>Raw input:</strong> "{parsedData.rawText}"
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                className="modal-button modal-button-primary"
+                onClick={handleAcceptPreview}
+                disabled={loadingApps}
+              >
+                {loadingApps ? "Processing..." : "Accept & Send"}
+              </button>
+              <button
+                className="modal-button modal-button-secondary"
+                onClick={handleCancelPreview}
+                disabled={loadingApps}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* DateTime Modal */}
       {showDateTimeModal && (
