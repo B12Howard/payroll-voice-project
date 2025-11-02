@@ -537,8 +537,7 @@ function App() {
               disabled={loadingApps}
             />
             
-            <form onSubmit={handleEmployeeSubmit} className="form">
-              {/* Employee Name Input */}
+            {/* <form onSubmit={handleEmployeeSubmit} className="form">
               <label className={isMobile ? "form-label form-label-mobile" : "form-label"}>
                 Employee Name:
               </label>
@@ -553,7 +552,6 @@ function App() {
                 className={isMobile ? "text-input text-input-mobile" : "text-input"}
               />
 
-              {/* Action Type Dropdown - only show when employee is selected */}
               {selectedEmployee && (
                 <>
                   <label className={isMobile ? "form-label form-label-mobile" : "form-label"}>
@@ -574,7 +572,6 @@ function App() {
                     <option value="delete">Delete</option>
                   </select>
 
-                  {/* Conditional inputs based on action type */}
                   {actionType === "add" && (
                     <>
                       <label className={isMobile ? "form-label form-label-mobile" : "form-label"}>
@@ -654,7 +651,7 @@ function App() {
                     </>
                   )}
 
-                  {/* Submit Button */}
+
                   {actionType && (
                     <button 
                       type="submit" 
@@ -666,7 +663,7 @@ function App() {
                   )}
                 </>
               )}
-            </form>
+            </form> */}
 
             {/* Employee Result Display */}
             {employeeResult && (
